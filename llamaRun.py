@@ -1,68 +1,63 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import matplotlib.pyplot as plt
-import numpy as np
 
 # Load the model and tokenizer
 model_name = "meta-llama/Llama-3.2-1B"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
 
-def visualize_attention_for_prompt(prompt):
+def get_attention_and_response(prompt):
     try:
         # Tokenize input
-        inputs = tokenizer(prompt, return_tensors="pt")  # No .to("cuda")
+        inputs = tokenizer(prompt, return_tensors="pt")
 
-        # Forward pass to get the outputs, including hidden states and attentions
-        outputs = model(**inputs, output_hidden_states=True, output_attentions=True)
+        # Move tensors to model device (ensure compatibility)
+        inputs = {key: value.to(model.device) for key, value in inputs.items()}
 
-        # Extract hidden states and attentions
-        hidden_states = outputs.hidden_states  # Tuple of hidden states
-        attentions = outputs.attentions        # Tuple of attention weights
+        # Forward pass to get attentions and logits
+        with torch.no_grad():
+            outputs = model(**inputs, output_attentions=True, return_dict=True)
 
-        # Visualize the shape of the final hidden state
-        final_hidden_state = hidden_states[-1]  # Last layer hidden state
-        print(f"Final Hidden State Shape for prompt '{prompt}': {final_hidden_state.shape}")
+        # Extract attention weights (tuple of tensors for each layer)
+        attentions = outputs.attentions  # Tuple: (num_layers, batch_size, num_heads, seq_len, seq_len)
 
-        # Visualizing the attention shapes for all layers
-        layer_shapes = []
-        for i, attention in enumerate(attentions):
-            print(f"Layer {i + 1} Attention Shape: {attention.shape}")
-            layer_shapes.append(attention.shape)
+        # Extract the model's response
+        generated_ids = model.generate(**inputs, max_length=50)
+        decoded_response = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        # Plotting the shapes of attention weights
-        layers = np.arange(1, len(attentions) + 1)
-        heads = [shape[1] for shape in layer_shapes]  # Number of attention heads
-        sequence_lengths = [shape[2] for shape in layer_shapes]  # Sequence lengths
+        print(f"Model Response for '{prompt}': {decoded_response}\n")
 
-        plt.figure(figsize=(10, 6))
-        plt.plot(layers, heads, label="Number of Attention Heads", marker="o")
-        plt.plot(layers, sequence_lengths, label="Sequence Length", marker="s")
-        plt.xlabel("Layer")
-        plt.ylabel("Dimension")
-        plt.title(f"Attention Head and Sequence Length per Layer for Prompt: '{prompt}'")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+        # Get attention weights for Layer 1, Head 1
+        attention_weights = attentions[0][0, 0].detach().cpu().numpy()  # First layer, first head
 
-        # Visualizing the attention weights of a specific layer (e.g., Layer 1)
-        specific_layer = 0  # Change this index to visualize other layers
-        attention_weights = attentions[specific_layer][0]  # First batch
+        return attention_weights, prompt
 
-        plt.imshow(attention_weights[0].detach().numpy(), cmap="viridis")
-        plt.colorbar(label="Attention Weight")
-        plt.title(f"Attention Weights for Layer {specific_layer + 1}, Head 1 for Prompt: '{prompt}'")
-        plt.xlabel("Sequence Position")
-        plt.ylabel("Sequence Position")
-        plt.show()
-
-    except AssertionError as e:
+    except Exception as e:
         print(f"Error: {e}")
-        print("Ensure that your environment supports CUDA or use a CPU-compatible version by removing '.to(\"cuda\")' from the code.")
 
 # Example prompts
 prompt_1 = "What is 2 plus 2?"
-prompt_2 = "Do you like the color green?"
+prompt_2 = "Do you like Diya Sabu?"
 
-visualize_attention_for_prompt(prompt_1)
-visualize_attention_for_prompt(prompt_2)
+# Get attention weights and responses
+attention_weights_1, prompt_1_text = get_attention_and_response(prompt_1)
+attention_weights_2, prompt_2_text = get_attention_and_response(prompt_2)
+
+# Plot attention weights side by side
+fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+axes[0].imshow(attention_weights_1, cmap="viridis")
+axes[0].set_title(f"Attention Weights for: '{prompt_1_text}'")
+axes[0].set_xlabel("Sequence Position")
+axes[0].set_ylabel("Sequence Position")
+plt.colorbar(axes[0].imshow(attention_weights_1, cmap="viridis"), ax=axes[0])
+
+axes[1].imshow(attention_weights_2, cmap="viridis")
+axes[1].set_title(f"Attention Weights for: '{prompt_2_text}'")
+axes[1].set_xlabel("Sequence Position")
+axes[1].set_ylabel("Sequence Position")
+plt.colorbar(axes[1].imshow(attention_weights_2, cmap="viridis"), ax=axes[1])
+
+plt.tight_layout()
+plt.show()
