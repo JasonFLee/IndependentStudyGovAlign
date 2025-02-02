@@ -27,3 +27,16 @@ How It Works
 6. After adding questions, click “Evaluate Quiz” to see GPT-4’s predicted answers, along with an accuracy score.
 
 Note: Change `model="gpt-4"` in the code to another model (e.g., `"gpt-3.5-turbo"`) if you prefer.
+
+
+FOR MODEL TO DOWNLOAD
+https://huggingface.co/meta-llama/Llama-3.2-1B
+python3 -m pip install huggingface-hub
+huggingface-cli login
+(use online pin: https://huggingface.co/settings/tokens)
+click all the boxes
+python3 -m pip install transformers
+\python3 -m pip install --upgrade pip
+python3 -m pip install torch torchvision torchaudio transformers matplotlib numpy pandas scipy scikit-learn requests tqdm
+
+
